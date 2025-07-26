@@ -1,1 +1,0 @@
-Pequeña utilidad para crear estructuras de carpetas y subcarpetas de una forma cómoda.
