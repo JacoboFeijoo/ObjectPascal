@@ -17,7 +17,7 @@ uses
 
 begin
   RequireDerivedFormResource:=True;
-  Application.Title:='Creador de carpetas editoriales';
+  Application.Title:='Estructurador';
   Application.Scaled:=True;
   Application.Initialize;
   Application.CreateForm(TForm1, Form1);

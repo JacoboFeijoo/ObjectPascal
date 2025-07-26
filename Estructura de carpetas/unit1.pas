@@ -5,18 +5,29 @@ unit Unit1;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, FileUtil;
+  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, StdCtrls,
+  ComCtrls, LCLTranslator;
 
 type
 
   { TForm1 }
+
   TForm1 = class(TForm)
-    Button1: TButton;
+    btnSelectRoot: TButton;
     Label1: TLabel;
-    SelectDirectoryDialog1: TSelectDirectoryDialog;
-    procedure Button1Click(Sender: TObject);
+    LoadConfig: TButton;
+    OpenDialog: TOpenDialog;
+    SaveDialog: TSaveDialog;
+    Start: TButton;
+    TreeView1: TTreeView;
+    procedure btnLoadConfigClick(Sender: TObject);
+    procedure btnStartClick(Sender: TObject);
   private
-    { private declarations }
+    FRootDir: string;
+    FConfig: TStringList;
+    procedure ProcessLevel(ParentNode: TTreeNode; BasePath: string; Level: Integer);
+    procedure SaveConfig;
+    procedure LoadConfigFile(const FileName: string);
   public
     { public declarations }
   end;
@@ -28,103 +39,173 @@ implementation
 
 {$R *.lfm}
 
-{ TForm1 }
+uses
+  LazFileUtils;
 
-procedure TForm1.Button1Click(Sender: TObject);
 
-var
-  RutaBase: String;
-  NombreCarpetaPrincipal: String;
-  RutaCompletaPrincipal: String;
-
-//---Procedimiento anidado para creación recursiva de carpetas-----
-
-  procedure CrearSubcarpetasRecursivamente(const RutaPadre: string; NivelActual: Integer);
-
-  var
-    NumCarpetasStr: string;
-    NumCarpetas: Integer;
-    i: Integer;
-    NuevaRuta: string;
-    NombreSubcarpeta: string;
-
-  begin
-    // Fin recursión si se alcanza el nivel máximo de subcarpetas (principal + 5)
-    if NivelActual > 6 then
-      Exit;
-
-    //Preguntar cuántas carpetas crear en este nivel
-    NumCarpetasStr := InputBox(
-      'Crear subcarpetas de NIVEL ' + IntToStr(NivelActual),
-      '¿Cuántas subcarpetas quieres crear dentro de la ruta:' + LineEnding + RutaPadre + '?' + LineEnding + '(Introduce 0 para no crear ninguna)',
-      '0'
-    );
-    NumCarpetas := StrToIntDef(NumCarpetasStr, 0);
-    // Si el usuario no quiere crear carpetas en este nivel, fin de ese nivel
-    if NumCarpetas <= 0 then
-      Exit;
-
-    //Bucle para pedir nombres y crear cada carpeta
-    for i := 1 to NumCarpetas do
-    begin
-      NombreSubcarpeta := InputBox(
-        'Nombre carpeta (NIVEL ' + IntToStr(NivelActual) + ')',
-        'Introduce el nombre para la subcarpeta ' + IntToStr(i) + ' de las ' + IntToStr(NumCarpetas) + ' que quieres crear dentro del NIVEL ' + IntToStr(NivelActual)+ ':',
-        ''
-      );
-      // Solo proceder si el usuario introduce un nombre
-      if Trim(NombreSubcarpeta) <> '' then
+// Iniciar creación estructura
+procedure TForm1.btnStartClick(Sender: TObject);
+begin
+  SetDefaultLang('es');
+  // Integrar la selección de carpeta raíz
+  if not SelectDirectory('Seleccionar la carpeta raíz', '', FRootDir) then
       begin
-        // Construir la ruta completa para la nueva subcarpeta
-        NuevaRuta := IncludeTrailingPathDelimiter(RutaPadre) + Trim(NombreSubcarpeta);
-        // Intentar crear la carpeta
-        if ForceDirectories(NuevaRuta) then
-            begin
-              // Si se crea con éxito, llamar recursivamente para el siguiente nivel
-              CrearSubcarpetasRecursivamente(NuevaRuta, NivelActual + 1);
-            end
-        else
-        begin
-          ShowMessage('Error: No se pudo crear la carpeta: ' + NuevaRuta);
-        end;
+        ShowMessage('No se seleccionó la carpeta raíz.');
+        Exit;
       end;
-    end;
-  end;
-//---Fin del procedimiento anidado
 
-begin //PROCEDIMIENTO INICIAL
-  //Mostrar el primer diálogo para seleccionar la carpeta base (NIVEL 1)
-  if SelectDirectoryDialog1.Execute then
-  begin
-    RutaBase := SelectDirectoryDialog1.FileName;
-    //Pedir al usuario el nombre de la carpeta principal (raíz del proyecto)
-    NombreCarpetaPrincipal := InputBox('Carpeta Principal', 'Introduce el nombre de la CARPETA PRINCIPAL (NIVEL 1) del proyecto:', '');
-    // Si el usuario cancela o no introduce un nombre, se termina la operación
-    if Trim(NombreCarpetaPrincipal) = '' then
-    begin
-      ShowMessage('Operación cancelada: no se introdujo un nombre para la carpeta principal.');
-      Exit;
-    end;
+  // Mostrar la carpeta seleccionada
+  ShowMessage('Raíz: ' + FRootDir);
 
-    // Si no cancela, se construye la ruta completa de la nueva carpeta principal
-    RutaCompletaPrincipal := IncludeTrailingPathDelimiter(RutaBase) + Trim(NombreCarpetaPrincipal);
-    //error al crear carpeta principal
-    if not ForceDirectories(RutaCompletaPrincipal) then
-    begin
-      ShowMessage('Error al crear la carpeta principal: ' + RutaCompletaPrincipal);
-      Exit;
-    end;
+  // Validación por si la carpeta no existe por alguna razón
+  if not DirectoryExists(FRootDir) then
+      begin
+        ShowMessage('La carpeta raíz seleccionada no existe.');
+        Exit;
+      end;
 
-    //Inicia el proceso recursivo para crear las subcarpetas de nivel 2
-    CrearSubcarpetasRecursivamente(RutaCompletaPrincipal, 2);
-
-    //Mostrar mensaje de finalización
-    ShowMessage('¡Creación de estructura de carpetas finalizado con éxito!');
-  end
-  else
-  begin
-    ShowMessage('Selección de carpeta cancelada.');
+  // Iniciar el proceso
+  TreeView1.Items.Clear;
+  FConfig := TStringList.Create;
+  try
+    ProcessLevel(nil, FRootDir, 1);
+    // Al terminar:
+    if MessageDlg('¿Guardar configuración?', mtConfirmation, [mbYES, mbNO], 0) = mrYES then
+      SaveConfig;
+  finally
+    FConfig.Free;
   end;
 end;
 
+// Recursión por niveles
+procedure TForm1.ProcessLevel(ParentNode: TTreeNode; BasePath: string; Level: Integer);
+var
+  FolderName: string;
+  Node: TTreeNode;
+  NewPath: string;
+begin
+  repeat
+    FolderName := InputBox('Nivel ' + IntToStr(Level),
+      'Nombre de carpeta (nivel ' + IntToStr(Level) + ')', '');
+    if FolderName = '' then Break;
+
+    NewPath := IncludeTrailingPathDelimiter(BasePath) + FolderName;
+    if not DirectoryExists(NewPath) then
+      ForceDirectories(NewPath);
+
+    if Assigned(ParentNode) then
+      Node := TreeView1.Items.AddChild(ParentNode, FolderName)
+    else
+      Node := TreeView1.Items.Add(nil, FolderName);
+
+    FConfig.Add(StringOfChar('\', Level - 1) + FolderName);
+
+    if MessageDlg(Format('¿Agregar subcarpetas dentro de "%s"?', [FolderName]),
+      mtConfirmation, [mbYES, mbNo], 0) = mrYES then
+      ProcessLevel(Node, NewPath, Level + 1);
+
+  until MessageDlg('¿Agregar otra carpeta al nivel ' + IntToStr(Level) + '?',
+        mtConfirmation, [mbYES, mbNO], 0) <> mrYES;
+end;
+
+// Guardar configuración
+procedure TForm1.SaveConfig;
+
+begin
+  if SaveDialog.Execute then
+  begin
+    FConfig.SaveToFile(SaveDialog.FileName, TEncoding.ANSI);
+    ShowMessage('Configuración guardada en ' + SaveDialog.FileName);
+  end;
+end;
+
+// Carga configuración
+procedure TForm1.btnLoadConfigClick(Sender: TObject);
+begin
+  if MessageDlg('¿Cargar una configuración guardada?', mtConfirmation, [mbYES, mbNO], 0) = mrYES then
+  begin
+    if OpenDialog.Execute then
+    begin
+      LoadConfigFile(OpenDialog.FileName); //Importa configuración
+      TreeView1.Items.Clear;
+      FConfig := TStringList.Create;
+      try
+        FConfig.LoadFromFile(OpenDialog.FileName, TEncoding.ANSI);
+      finally
+        FConfig.Free;
+      end;
+    end;
+  end;
+end;
+
+// Cargar configuración: selecciona carpeta base e interpreta config
+procedure TForm1.LoadConfigFile(const FileName: string);
+var
+  Lines: TStringList;
+  i, Level: Integer;
+  FolderName: string;
+  PathStack: array of string;
+  NodeStack: array of TTreeNode;
+  FullPath: string;
+  NewNode: TTreeNode;
+begin
+  if not SelectDirectory('Selecciona la carpeta base donde recargar la estructura', '', FRootDir) then
+    Exit;
+
+  Lines := TStringList.Create;
+  try
+    Lines.LoadFromFile(FileName, TEncoding.ANSI);
+
+    TreeView1.Items.BeginUpdate;
+    TreeView1.Items.Clear;
+
+    // Reservamos un tamaño inicial para los stacks (por ejemplo, hasta 20 niveles)
+    SetLength(PathStack, 20);
+    SetLength(NodeStack, 20);
+
+    for i := 0 to Lines.Count - 1 do
+    begin
+      // === 1. Detectar nivel por cantidad de '\' iniciales ===
+      Level := 0;
+      while (Level < Length(Lines[i])) and (Lines[i][Level + 1] = '\') do
+        Inc(Level);
+
+      FolderName := Trim(Copy(Lines[i], Level + 1, MaxInt));
+      if FolderName = '' then Continue;
+
+      // Aseguramos tamaño suficiente del stack dinámico
+      if Length(PathStack) <= Level then
+      begin
+        SetLength(PathStack, Level + 5);
+        SetLength(NodeStack, Level + 5);
+      end;
+
+      // === 2. Construir la ruta completa según el nivel ===
+      if Level = 0 then
+        PathStack[Level] := IncludeTrailingPathDelimiter(FRootDir) + FolderName
+      else
+        PathStack[Level] := IncludeTrailingPathDelimiter(PathStack[Level - 1]) + FolderName;
+
+      FullPath := PathStack[Level];
+
+      // === 3. Crear carpeta si no existe ===
+      if not DirectoryExists(FullPath) then
+        ForceDirectories(FullPath);
+
+      // === 4. Agregar al TreeView ===
+      if Level = 0 then
+        NewNode := TreeView1.Items.Add(nil, FolderName)
+      else
+        NewNode := TreeView1.Items.AddChild(NodeStack[Level - 1], FolderName);
+
+      NodeStack[Level] := NewNode;
+    end;
+
+    TreeView1.FullExpand;
+    ShowMessage('Estructura importada correctamente.');
+  finally
+    Lines.Free;
+    TreeView1.Items.EndUpdate;
+  end;
+  end;
 end.
