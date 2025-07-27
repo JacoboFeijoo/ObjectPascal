@@ -3,7 +3,7 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Default"/>
+    <BuildModes Active="Ejecutable mínimo"/>
     <Units>
       <Unit>
         <Filename Value="project1.lpr"/>
@@ -12,7 +12,7 @@
         <WindowIndex Value="-1"/>
         <TopLine Value="-1"/>
         <CursorPos X="-1" Y="-1"/>
-        <UsageCount Value="49"/>
+        <UsageCount Value="50"/>
       </Unit>
       <Unit>
         <Filename Value="unit1.pas"/>
@@ -22,10 +22,10 @@
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="Unit1"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="45"/>
-        <CursorPos X="67" Y="133"/>
-        <FoldState Value=" T3i30V2 PaiM0k"/>
-        <UsageCount Value="49"/>
+        <TopLine Value="76"/>
+        <CursorPos X="21" Y="94"/>
+        <FoldState Value=" T3jX082 PifU0m"/>
+        <UsageCount Value="50"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
       </Unit>

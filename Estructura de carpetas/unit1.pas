@@ -77,16 +77,21 @@ begin
   end;
 end;
 
-// Recursión por niveles
 procedure TForm1.ProcessLevel(ParentNode: TTreeNode; BasePath: string; Level: Integer);
 var
   FolderName: string;
   Node: TTreeNode;
   NewPath: string;
+  ParentFolderName: string;
 begin
+  if Assigned(ParentNode) then
+    ParentFolderName := ParentNode.Text
+  else
+    ParentFolderName := 'Raíz';
+
   repeat
-    FolderName := InputBox('Nivel ' + IntToStr(Level),
-      'Nombre de carpeta (nivel ' + IntToStr(Level) + ')', '');
+    FolderName := InputBox('Carpeta dentro de "' + ParentFolderName + '"',
+      'Nombre de la nueva carpeta:', '');
     if FolderName = '' then Break;
 
     NewPath := IncludeTrailingPathDelimiter(BasePath) + FolderName;
@@ -100,13 +105,16 @@ begin
 
     FConfig.Add(StringOfChar('\', Level - 1) + FolderName);
 
+    // Preguntar si desea agregar subcarpetas
     if MessageDlg(Format('¿Agregar subcarpetas dentro de "%s"?', [FolderName]),
       mtConfirmation, [mbYES, mbNo], 0) = mrYES then
       ProcessLevel(Node, NewPath, Level + 1);
 
-  until MessageDlg('¿Agregar otra carpeta al nivel ' + IntToStr(Level) + '?',
-        mtConfirmation, [mbYES, mbNO], 0) <> mrYES;
+    // Preguntar si desea agregar otra carpeta dentro de la actual carpeta padre
+  until MessageDlg(Format('¿Agregar otra carpeta dentro de "%s"?', [ParentFolderName]),
+                   mtConfirmation, [mbYES, mbNO], 0) <> mrYES;
 end;
+
 
 // Guardar configuración
 procedure TForm1.SaveConfig;
